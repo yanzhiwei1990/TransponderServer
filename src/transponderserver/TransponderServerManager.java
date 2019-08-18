@@ -1,6 +1,11 @@
 package transponderserver;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
@@ -10,32 +15,39 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import org.json.JSONObject;
 
 import transponderserver.Callback.SingleTransponderConnnectionCallback;
+import transponderserver.SingleClientConnection.SingleClientSocketThread;
 import transponderserver.Callback.SingleClientConnnectionCallback;
 
 public class TransponderServerManager {
-
+	public static final String TAG = TransponderServerManager.class.getSimpleName();
+	
 	private ServerSocket mMainServer = null;
-	private List<Socket> mClientSocketList = new ArrayList<Socket>();
-	private List<SingleTransponderConnection> mTransponderConnecttionList = new ArrayList<SingleTransponderConnection>();
+	/*private List<Socket> mClientSocketList = new ArrayList<Socket>();*/
+	//private List<SingleTransponderConnection> mTransponderConnecttionList = new ArrayList<SingleTransponderConnection>();
 	private List<SingleClientConnection> mClientConnectionList = new ArrayList<SingleClientConnection>();
-	private List<SingleTransponderConnnectionCallback> mSingleTransponderConnnectionCallbackList = new ArrayList<SingleTransponderConnnectionCallback>();
+	//private List<SingleTransponderConnnectionCallback> mSingleTransponderConnnectionCallbackList = new ArrayList<SingleTransponderConnnectionCallback>();
 	private List<Callback.SingleClientConnnectionCallback> mSingleClientConnnectionCallbackList = new ArrayList<Callback.SingleClientConnnectionCallback>();
-	private Object mClientSocketListLock = new Object();
-	private Object mTransponderConnecttionListLock = new Object();
+	/*private Object mClientSocketListLock = new Object();*/
+	//private Object mTransponderConnecttionListLock = new Object();
 	private Object mClientConnectionListLock = new Object();
 	private boolean mIsRunning = true;
+	private int fixed_transponder_port = 19910;
 	
-	public TransponderServerManager() {
-		// TODO Auto-generated constructor stub
+	public TransponderServerManager(int serverport) {
+		fixed_transponder_port = serverport;
 	}
 	
-	private SingleTransponderConnnectionCallback mSingleTransponderConnnectionCallback = new SingleTransponderConnnectionCallback() {
+	/*private SingleTransponderConnnectionCallback mSingleTransponderConnnectionCallback = new SingleTransponderConnnectionCallback() {
 		@Override
 		public void onTransponderConnnectionStatusChange(SingleTransponderConnection transponder, String info, String action) {
 			// TODO Auto-generated method stub
-			System.out.println("onTransponderConnnectionStatusChange transponder = " + transponder + ", info = " + info + ", action = " + action);
+			LogUtils.LOGD(TAG, "onTransponderConnnectionStatusChange transponder = " + transponder + ", info = " + info + ", action = " + action);
 			if (action != null && action.length() > 0) {
 				switch (action) {
 					case "add":
@@ -50,13 +62,13 @@ public class TransponderServerManager {
 			}
 		}
 		
-	};
+	};*/
 	
 	private SingleClientConnnectionCallback mSingleClientConnnectionCallback = new SingleClientConnnectionCallback() {
 		@Override
 		public void onClientStatusChange(SingleClientConnection client, String info, String action) {
 			// TODO Auto-generated method stub
-			System.out.println("SingleClientConnnectionCallback client = " + client + ", info = " + info + ", action = " + action);
+			LogUtils.LOGD(TAG, "SingleClientConnnectionCallback client = " + client + ", info = " + info + ", action = " + action);
 			if (action != null && action.length() > 0) {
 				switch (action) {
 					case "add":
@@ -65,6 +77,9 @@ public class TransponderServerManager {
 					case "remove":
 						removeSingleClientConnection(client);
 						break;
+					case "exit":
+						
+						break;
 					default:
 						break;
 				}
@@ -72,46 +87,47 @@ public class TransponderServerManager {
 		}
 	};
 	
-	public void moreserver(int port){
-    	System.out.println("moreserver starting...");
+	public void moreserver(){
+		LogUtils.LOGD(TAG, "moreserver starting...");
         try {
-        	mMainServer = new ServerSocket(port);
+        	mMainServer = new ServerSocket(fixed_transponder_port);
 		} catch (Exception e) {
-			e.printStackTrace();
-			System.out.println("mMainServer creat Exception = " + e.getMessage());
+			LogUtils.TRACE(e);
+			LogUtils.LOGD(TAG, "mMainServer creat Exception = " + e.getMessage());
 		}
         try {
         	mMainServer.setReuseAddress(true);
-        	mMainServer.setSoTimeout(3000);
+        	//mMainServer.setSoTimeout(3000);
 		} catch (Exception e) {
-			e.printStackTrace();
-			System.out.println("mMainServer setReuseAddress Exception = " + e.getMessage());
+			LogUtils.TRACE(e);
+			LogUtils.LOGD(TAG, "mMainServer setReuseAddress Exception = " + e.getMessage());
 		}
         while (mIsRunning) {
         	Socket newSocket = null;
         	try {
-        		System.out.println("listen port 19910...");
+        		LogUtils.LOGD(TAG, "listen port " + fixed_transponder_port + "...");
         		newSocket = mMainServer.accept();
         	} catch (Exception e) {
-        		System.out.println("mMainServer.accept() Exception = " + e.getMessage());
+        		LogUtils.TRACE(e);
+        		LogUtils.LOGD(TAG, "mMainServer.accept() Exception = " + e.getMessage());
         		continue;
         	}
         	try {
-        		System.out.println("moreserver dealNewSocket!");
-	            dealNewSocket(mMainServer, newSocket, mSingleClientConnnectionCallback, mSingleTransponderConnnectionCallback);
+        		LogUtils.LOGD(TAG, "moreserver dealNewSocket!");
+        		dealNewSocket(mMainServer, newSocket, mSingleClientConnnectionCallback);
 	        } catch (Exception e) {
-	            e.printStackTrace();
-	            System.out.println("while Exception = " + e.getMessage());
+	        	LogUtils.TRACE(e);
+	            LogUtils.LOGD(TAG, "while Exception = " + e.getMessage());
 	        }
 		}
         try {
         	if (mMainServer != null) {
         		mMainServer.close();
         	}
-        	System.out.println("mMainServer.close() over!");
+        	LogUtils.LOGD(TAG, "mMainServer.close() over!");
         } catch (Exception e) {
-        	e.printStackTrace();
-    		System.out.println("mMainServer.close() Exception = " + e.getMessage());
+        	LogUtils.TRACE(e);
+        	LogUtils.LOGD(TAG, "mMainServer.close() Exception = " + e.getMessage());
         }
         stopAll();
     }
@@ -122,39 +138,42 @@ public class TransponderServerManager {
 			SingleClientConnection singleClientConnection;
 			while (iterator.hasNext()) {
 				singleClientConnection = (SingleClientConnection)iterator.next();
-				singleClientConnection.stop();
+				singleClientConnection.stopRun();
 			}
 			mClientConnectionList.clear();
-			System.out.println("stopAll clear mClientConnectionList");
+			LogUtils.LOGD(TAG, "stopAll clear mClientConnectionList");
 		}
-		synchronized (mTransponderConnecttionListLock) {
+		/*synchronized (mTransponderConnecttionListLock) {
 			Iterator<SingleTransponderConnection> iterator = mTransponderConnecttionList.iterator();
 			SingleTransponderConnection singleTransponderConnection;
 			while (iterator.hasNext()) {
 				singleTransponderConnection = (SingleTransponderConnection)iterator.next();
-				singleTransponderConnection.stop();
+				singleTransponderConnection.stopRun();
 			}
 			mTransponderConnecttionList.clear();
-			System.out.println("stopAll clear mTransponderConnecttionList");
-		}
+			LogUtils.LOGD(TAG, "stopAll clear mTransponderConnecttionList");
+		}*/
 	}
 	
-	private void dealNewSocket(ServerSocket server, Socket client, SingleClientConnnectionCallback clientcallback, SingleTransponderConnnectionCallback transpondercallback) {
-		if (containClient(client)) {
+	private void dealNewSocket(ServerSocket server, Socket client, SingleClientConnnectionCallback clientcallback) {
+		LogUtils.LOGD(TAG, "dealNewSocket server = " + server.getInetAddress() + ", client = " + client);
+		SingleClientConnection singleClientConnection = getSingleClientConnection(client);
+		if (singleClientConnection != null) {
 			//update info
-			System.out.println("dealNewSocket already exist = " + client.getInetAddress());
+			LogUtils.LOGD(TAG, "dealNewSocket already exist singleClientConnection = " + singleClientConnection.toString());
+			singleClientConnection.restartRun();
 		} else {
-			SingleClientConnection singleclient = new SingleClientConnection(server, client, clientcallback, transpondercallback);
-			singleclient.start();
-			System.out.println("dealNewSocket start singleclient = " + singleclient);
+			singleClientConnection = new SingleClientConnection(fixed_transponder_port, server, client, clientcallback);
+			singleClientConnection.startRun();
+			LogUtils.LOGD(TAG, "dealNewSocket start singleClientConnection = " + singleClientConnection.toString());
 		}
 	}
 	
-	private boolean containClient(Socket socket) {
+	/*private boolean containClient(Socket socket) {
 		boolean result = false;
 		if (mClientSocketList.contains(socket)) {
 			result = true;
-			System.out.println("containClient find socket = " + socket);
+			LogUtils.LOGD(TAG, "containClient find socket = " + socket);
 		} else {
 			synchronized (mClientConnectionListLock) {
 				Iterator<SingleClientConnection> iterator = mClientConnectionList.iterator();
@@ -163,75 +182,92 @@ public class TransponderServerManager {
 					singleClientConnection = (SingleClientConnection)iterator.next();
 					if (singleClientConnection.getClientSocket() == socket) {
 						result = true;
-						System.out.println("containClient find singleClientConnection = " + singleClientConnection);
+						LogUtils.LOGD(TAG, "containClient find singleClientConnection = " + singleClientConnection);
 						break;
 					}
 				}
 			}
 		}
 		return result;
+	}*/
+	
+	private SingleClientConnection getSingleClientConnection(Socket socket) {
+		SingleClientConnection result = null;
+		synchronized (mClientConnectionListLock) {
+			Iterator<SingleClientConnection> iterator = mClientConnectionList.iterator();
+			SingleClientConnection singleClientConnection;
+			while (iterator.hasNext()) {
+				singleClientConnection = (SingleClientConnection)iterator.next();
+				if (singleClientConnection.getClientSocket() == socket) {
+					result = singleClientConnection;
+					LogUtils.LOGD(TAG, "getSingleClientConnection find singleClientConnection = " + singleClientConnection);
+					break;
+				}
+			}
+		}
+		return result;
 	}
 	
-	private void addClientSocket(Socket add) {
+	/*private void addClientSocket(Socket add) {
 		synchronized (mClientSocketListLock) {
 			if (mClientSocketList.contains(add)) {
-				System.out.println("addClientSocket already exist");
+				LogUtils.LOGD(TAG, "addClientSocket already exist");
 			} else {
 				mClientSocketList.add(add);
-				System.out.println("addClientSocket add = " + add);
+				LogUtils.LOGD(TAG, "addClientSocket add = " + add);
 			}
 		}
 	}
 	
 	private void removeClientSocket(Socket remove) {
 		if (remove == null) {
-			System.out.println("removeClientSocket null");
+			LogUtils.LOGD(TAG, "removeClientSocket null");
 		}
 		synchronized (mClientSocketListLock) {
 			mClientSocketList.remove(remove);
-			System.out.println("removeClientSocket remove = " + remove);
+			LogUtils.LOGD(TAG, "removeClientSocket remove = " + remove);
 		}
-	}
+	}*/
 	
 	private void addSingleClientConnection(SingleClientConnection add) {
 		synchronized (mClientConnectionListLock) {
 			if (mClientConnectionList.contains(add)) {
-				System.out.println("addSingleClientConnection already exist");
+				LogUtils.LOGD(TAG, "addSingleClientConnection already exist");
 			} else {
 				mClientConnectionList.add(add);
-				System.out.println("addSingleClientConnection add = " + add);
+				LogUtils.LOGD(TAG, "addSingleClientConnection add = " + add);
 			}
 		}
 	}
 	
 	private void removeSingleClientConnection(SingleClientConnection remove) {
 		if (remove == null) {
-			System.out.println("removeSingleClientConnection null");
+			LogUtils.LOGD(TAG, "removeSingleClientConnection null");
 		}
 		synchronized (mClientConnectionListLock) {
 			mClientConnectionList.remove(remove);
-			System.out.println("removeSingleClientConnection remove = " + remove);
+			LogUtils.LOGD(TAG, "removeSingleClientConnection remove = " + remove);
 		}
 	}
 	
-	private void addSingleTransponderConnection(SingleTransponderConnection add) {
+	/*private void addSingleTransponderConnection(SingleTransponderConnection add) {
 		synchronized (mTransponderConnecttionListLock) {
 			if (mTransponderConnecttionList.contains(add)) {
-				System.out.println("addSingleTransponderConnection already exist");
+				LogUtils.LOGD(TAG, "addSingleTransponderConnection already exist");
 			} else {
 				mTransponderConnecttionList.add(add);
-				System.out.println("addSingleTransponderConnection add = " + add);
+				LogUtils.LOGD(TAG, "addSingleTransponderConnection add = " + add);
 			}
 		}
-	}
+	}*/
 	
-	private void removeSingleTransponderConnection(SingleTransponderConnection remove) {
+	/*private void removeSingleTransponderConnection(SingleTransponderConnection remove) {
 		if (remove == null) {
-			System.out.println("removeSingleTransponderConnection null");
+			LogUtils.LOGD(TAG, "removeSingleTransponderConnection null");
 		}
 		synchronized (mTransponderConnecttionListLock) {
 			mTransponderConnecttionList.remove(remove);
-			System.out.println("removeSingleTransponderConnection remove = " + remove);
+			LogUtils.LOGD(TAG, "removeSingleTransponderConnection remove = " + remove);
 		}
-	}
+	}*/	
 }
